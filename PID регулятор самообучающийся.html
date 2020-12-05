@@ -1,0 +1,174 @@
+<!DOCTYPE HTML>
+<html>
+ <head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, minimum-scale=0.1, maximum-scale=1.0">
+  <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
+  <title>Lite speaking robot</title>
+  <meta name="yandex-verification" content="60d205c5a30d922a" />
+ </head>
+ <body>
+
+<style>
+    #epoh, #proportional, #integral, #differential, #success_value {
+        font-size: 20px;
+    }
+    #canvas {
+        max-width: 500px;
+        width: 80%;
+    }
+</style>
+
+
+<h1> AI PID controller learns with Genetic algorithm.</h1>
+
+<canvas id="canvas" width="500" height="500"></canvas>
+<div id="epoh"></div>
+<div id="proportional"></div>
+<div id="integral"></div>
+<div id="differential"></div>
+<div id="success_value"></div>
+
+<script> 
+function randomInteger(min, max) {
+  // получить случайное число от (min-0.5) до (max+0.5)
+  let rand = min - 0.5 + Math.random() * (max - min + 1);
+  return Math.round(rand);
+}
+arr_po = []
+arr_po_new = []
+arr_success = []
+individ_in_po = 5
+for (let k=0; k<individ_in_po; k++) {
+    arr_po.push( [randomInteger(-151, 501),randomInteger(-151, 501),randomInteger(-151, 501)] )
+}
+let numEpoh = 0
+begin()
+async function begin() {
+    while (true) {
+        await go(arr_po)
+        document.querySelector('#epoh').innerText = 'Epoh: '+ numEpoh
+        numEpoh++
+        let sum_arr_success = 0
+        for (a_s in arr_success) {
+            sum_arr_success = sum_arr_success + arr_success[a_s]
+        }
+        arr_po_new = []
+        for (let num_individ in arr_po) {
+            let rand_c_fat = randomInteger(0, sum_arr_success)
+            let rand_c_mat = randomInteger(0, sum_arr_success)
+            let fat_num = 0
+            let mat_num = 0
+
+            var arr_success_help = JSON.parse(JSON.stringify(arr_success))
+            for (let i in arr_success_help) {
+                if (arr_success_help[i] > arr_success_help[fat_num]) {
+                    fat_num = i
+                }
+            }
+            for (let i in arr_success_help) {
+                if (arr_success_help[fat_num] > arr_success_help[i] && arr_success_help[i] > arr_success_help[mat_num]) {
+                    mat_num = i
+                }
+            }
+            let individ_new = JSON.parse(JSON.stringify(arr_po[fat_num]))
+            // мутировать
+            let num_gen_mutation = randomInteger(0, 2)
+            let rate = 0
+            if ( 5 <= numEpoh && numEpoh < 15) { rate = 0.3 }
+            if ( 15 <= numEpoh ) { rate = 0.03 }
+                if (num_individ > 0) {
+                    if (0 <= numEpoh && numEpoh < 5) {
+                        individ_new[0] = randomInteger(-151, 501)
+                        individ_new[1] = randomInteger(-151, 501)
+                        individ_new[2] = randomInteger(-151, 501)
+                    } else {
+                        individ_new[0] = individ_new[0] + rate*individ_new[0]*randomInteger(-1, 1)
+                        individ_new[1] = individ_new[1] + rate*individ_new[1]*randomInteger(-1, 1)
+                        individ_new[2] = individ_new[2] + rate*individ_new[2]*randomInteger(-1, 1)
+                    }
+                } else {
+                    document.querySelector('#proportional').innerText = 'Proportional: '+ individ_new[0]
+                    document.querySelector('#integral').innerText = 'Integral: '+ individ_new[1]
+                    document.querySelector('#differential').innerText = 'Differential: '+ individ_new[2]
+                }
+            arr_po_new.push(individ_new)
+        }
+        arr_po = arr_po_new
+        arr_success = []
+    }
+}
+async function go(input_arr_po) {
+    for (num_i in input_arr_po) {
+        await start(input_arr_po[num_i][0], input_arr_po[num_i][1], input_arr_po[num_i][2], num_i)
+        await new Promise((resolve, reject) => {
+            setTimeout(() => {
+                resolve("result");
+            }, 100);
+        })
+    }
+}
+function start(kp, ki, kd, num_i) {
+    let T0=20
+    let Tneed=150
+    let m=100
+    let c=4200
+    let p0=5000
+    let dt=300
+    let arr_T=[]
+    for (let i=0; i<20; i++) {
+        arr_T.push(T0)
+    }
+    eIntegral = 0
+    ePred=0
+    arr_e = []
+    let setInt = setInterval(x,1)
+    z=0
+    function x() {
+        let e = Tneed-T0
+        arr_e.push(e*e)
+        let de = ePred - e
+        ePred = e
+        eIntegral = eIntegral + e
+        p = kp*e+ki*eIntegral + (kd)*de
+        arr_T = arr_T.slice(1)
+        T0=arr_T[arr_T.length-1]
+        T1=T0+((p-p0)*dt)/(c*m)
+        arr_T.push(T1)   
+
+        let canvas=document.querySelector('#canvas')
+        let ctx = canvas.getContext('2d')
+        
+        ctx.strokeStyle='Blue'
+        ctx.lineWidth=4
+        ctx.beginPath()
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+        for (i in arr_T) {
+            ctx.lineTo(0+i*25,300-arr_T[i])
+        }
+        ctx.stroke()
+        ctx.strokeStyle='Red'
+        ctx.lineWidth=4
+        ctx.beginPath()
+        ctx.lineTo(0,300-Tneed)
+        ctx.lineTo(0+25*arr_T.length,300-Tneed)
+        ctx.stroke()
+        z++
+        if (z>15) {
+            clearInterval(setInt)
+            sum_arr_e = 0
+            for (ne2 in arr_e) {
+                if (ne2 > 6) {
+                    sum_arr_e = sum_arr_e + arr_e[ne2]
+                }
+            }
+            arr_success.push( Math.pow( (10000000/sum_arr_e) , 1) )
+            document.querySelector('#success_value').innerText = 'Success value: '+ JSON.stringify( Math.pow( (10000000/sum_arr_e) , 1) )
+        }
+    }
+}
+</script>
+
+
+</body>
+</html>
